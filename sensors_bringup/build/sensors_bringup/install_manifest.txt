@@ -1,0 +1,17 @@
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/config/ekf.yaml
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/launch/sensors_bringup.launch.py
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/ament_index/resource_index/package_run_dependencies/sensors_bringup
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/ament_index/resource_index/parent_prefix_path/sensors_bringup
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/environment/ament_prefix_path.sh
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/environment/ament_prefix_path.dsv
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/environment/path.sh
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/environment/path.dsv
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/local_setup.bash
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/local_setup.sh
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/local_setup.zsh
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/local_setup.dsv
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/package.dsv
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/ament_index/resource_index/packages/sensors_bringup
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/cmake/sensors_bringupConfig.cmake
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/cmake/sensors_bringupConfig-version.cmake
+/home/nvidia/f1tenth_ws/src/sensors_bringup/install/sensors_bringup/share/sensors_bringup/package.xml
