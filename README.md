@@ -1,160 +1,244 @@
-# sensors_bringup
+# Sensors Bringup — F1TENTH RTAB-Map SLAM Pipeline
 
-ROS 2 package that starts the F1tenth car's full sensor and odometry stack: RealSense camera, IMU calibration, LiDAR-based ICP odometry, and an Extended Kalman Filter (EKF) that fuses everything into a single `/odom_ekf` output used by the MPC controller and RTAB-Map.
+## Hardware
 
----
-
-## What gets launched
-
-```
-RealSense D435i
-  └─ /camera/camera/imu  ──► imu_covariance_override ──► /imu/data ──┐
-                                                                        ├──► icp_odometry ──► /odom_icp ──► ekf_filter_node ──► /odom_ekf
-/scan (LiDAR, external) ─────────────────────────────────────────────┘                                          ▲
-/odom (VESC, external)  ──────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-| Topic | Description |
-|---|---|
-| `/camera/camera/imu` | Raw IMU from RealSense |
-| `/imu/data` | Bias-corrected IMU, aligned to `base_link` |
-| `/odom_icp` | LiDAR odometry (ICP, Frame-to-Map) |
-| `/odom` | Wheel odometry from VESC (bootstrap only) |
-| `/odom_ekf` | **Final fused odometry — use this** |
-
----
-
-## Prerequisites
-
-Install these ROS 2 packages before building:
-
-```bash
-sudo apt install ros-$ROS_DISTRO-realsense2-camera \
-                 ros-$ROS_DISTRO-robot-localization \
-                 ros-$ROS_DISTRO-rtabmap-ros
-```
-
-Your workspace must also have a LiDAR driver publishing `/scan` (e.g. `urg_node` for the Hokuyo) and the VESC driver publishing `/odom`. Those are **not** started by this package.
-
----
-
-## Build
-
-```bash
-cd ~/f1tenth_ws
-colcon build --packages-select sensors_bringup
-source install/setup.bash
-```
-
----
-
-## Launch
-
-```bash
-ros2 launch sensors_bringup sensors_bringup.launch.py
-```
-
-### Startup sequence
-
-1. **RealSense camera** initialises (depth 424×240 @ 30 FPS, infra1/2, IMU).
-2. **`imu_covariance_override`** starts and prints:
-   ```
-   Collecting 200 samples for gyro bias calibration...
-   ```
-3. **Keep the car completely still** for ~5 seconds while it collects samples.
-4. Calibration finishes and prints the measured bias offsets:
-   ```
-   Gyro bias: x=... y=... z=...
-   ```
-5. **ICP odometry** begins processing `/scan` + `/imu/data`.
-6. **EKF** starts fusing sources and publishing `/odom_ekf` at 45 Hz.
-
-> **Important:** If the car moves during step 3 the gyro bias will be wrong and odometry will drift. Always wait for the calibration message before driving.
-
----
-
-## Verifying it works
-
-```bash
-# All topics should be listed
-ros2 topic list | grep -E "imu|odom|scan"
-
-# Check the final fused odometry is flowing
-ros2 topic echo /odom_ekf --once
-
-# Quick sanity check on rates
-ros2 topic hz /odom_ekf   # expect ~45 Hz
-ros2 topic hz /odom_icp   # expect ~10–30 Hz depending on LiDAR
-```
-
-If `/odom_ekf` is not publishing, check:
-- Is `/scan` publishing? The ICP node needs it to start outputting `/odom_icp`.
-- Is `/odom` publishing? The EKF needs at least one odometry source to initialise.
-- Did the RealSense fail to open? Run `ros2 topic hz /camera/camera/imu` to confirm.
-
----
-
-## Static transforms
-
-Two fixed transforms are published and must match your physical mounting:
-
-| Transform | Translation (x, y, z) | Meaning |
+| Component | Model | Interface |
 |---|---|---|
-| `base_link → laser` | 0.27 m, 0.00 m, 0.11 m | LiDAR position on chassis |
-| `base_link → camera_link` | 0.10 m, 0.00 m, 0.10 m | RealSense position on chassis |
+| Compute | NVIDIA Jetson Orin Nano Super (JetPack) | — |
+| Stereo + Depth Camera | Intel RealSense D435i | USB 3.2 |
+| 2D LiDAR | SICK TiM | Ethernet |
+| Motor Controller | VESC | USB |
 
-To adjust for your build, edit the `static_transform_publisher` arguments in [`launch/sensors_bringup.launch.py`](launch/sensors_bringup.launch.py).
+## Sensor Topics
 
----
+### RealSense D435i
 
-## Tuning
-
-### IMU (`src/imu_covariance_override.py`)
-
-The node remaps the camera's IMU axes to align with `base_link`:
-
-```
-(gx, gy, gz) → (gz, -gx, -gy)
-```
-
-If your RealSense is mounted in a non-standard orientation you will need to change this rotation. The angular velocity covariance is currently set to `0.001` on the diagonal — increase it if the EKF is over-trusting the gyro.
-
-### EKF (`config/ekf.yaml`)
-
-Key parameters:
-
-| Parameter | Value | Notes |
+| Topic | Type | Used For |
 |---|---|---|
-| `frequency` | 45 Hz | Output rate; tune to match your control loop |
-| `two_d_mode` | true | Ignores z, roll, pitch — correct for flat floors |
-| odom0 (`/odom_icp`) | x, y, yaw, vx | Primary position source |
-| odom1 (`/odom`) | vx only | VESC velocity for startup bootstrap |
-| imu0 (`/imu/data`) | vyaw, ax | Rotation rate + forward acceleration |
+| `/camera/camera/infra1/image_rect_raw` | `sensor_msgs/Image` | Visual features for loop closure |
+| `/camera/camera/depth/image_rect_raw` | `sensor_msgs/Image` | Depth data for RTAB-Map |
+| `/camera/camera/infra1/camera_info` | `sensor_msgs/CameraInfo` | Camera intrinsics |
+| `/camera/camera/imu` | `sensor_msgs/Imu` | Raw accel + gyro (fused by Madgwick filter) |
 
-### ICP odometry (`launch/sensors_bringup.launch.py`)
+### SICK LiDAR
 
-Relevant parameters for racing speeds:
+| Topic | Type | QoS | Used For |
+|---|---|---|---|
+| `/scan` | `sensor_msgs/LaserScan` | RELIABLE + TRANSIENT_LOCAL | ICP scan matching, occupancy grid |
 
-| Parameter | Value | Notes |
+### VESC Wheel Odometry
+
+| Topic | Type | Used For |
 |---|---|---|
-| `Icp/MaxTranslation` | 1.0 m | Max motion between frames (covers 5 m/s at 5 Hz) |
-| `Icp/MaxRotation` | 1.57 rad | Max rotation between frames (90°) |
-| `Icp/VoxelSize` | 0.05 m | Point cloud downsampling |
-| `OdomF2M/MaxSize` | 2000 | Local map size in points |
-| `Odom/ResetCountdown` | 1 | Resets immediately on failure — important for recovery |
+| `/odom` | `nav_msgs/Odometry` | Primary odometry (odom → base_link TF) |
 
----
-
-## File structure
+## Architecture
 
 ```
-sensors_bringup/
-├── config/
-│   └── ekf.yaml                  # EKF sensor fusion config
-├── launch/
-│   └── sensors_bringup.launch.py # Main launch file
-├── src/
-│   └── imu_covariance_override.py # IMU calibration + axis remapping node
-├── CMakeLists.txt
-└── package.xml
+VESC wheel odom ──► /odom ──────────────────────┐
+                                                 │
+RealSense D435i ──► infra1 + depth + imu ───┐    │
+                                             ├──► RTAB-Map SLAM ──► map→odom correction
+SICK LiDAR ──────► /scan ───────────────────┘    │       │
+                                                 │       ├──► /localization_pose
+Madgwick filter ──► /camera/camera/imu/filtered ─┘       ├──► /map (occupancy grid)
+                                                         └──► /cloud_map (3D point cloud)
+```
+
+RTAB-Map receives wheel odometry, depth images, IR images, filtered IMU, and LiDAR scans. It performs:
+
+1. **Neighbor link refining** — ICP scan matching between consecutive nodes to correct heading errors from wheel odom
+2. **Proximity detection** — ICP matching against nearby stored scans when revisiting areas
+3. **Visual loop closure** — feature matching on IR images to recognize previously visited locations
+4. **Graph optimization** — globally adjusts all node poses after adding ICP/visual constraints
+
+The corrected pose is published on `/localization_pose` in the `map` frame.
+
+## TF Tree
+
+```
+map → odom → base_link → camera_link → camera_infra1_optical_frame
+                                      → camera_depth_optical_frame
+                                      → camera_accel_optical_frame
+                                      → camera_gyro_optical_frame
+                       → laser
+```
+
+- `odom → base_link`: published by VESC odom node
+- `map → odom`: published by RTAB-Map (drift correction)
+- `base_link → camera_link`: static transform (0.1, 0, 0.1)
+- `base_link → laser`: static transform (0.27, 0, 0.1)
+- `camera_link → *_optical_frame`: published by RealSense driver
+
+## Known Issues & Fixes
+
+### Jetson + RealSense D435i
+
+**Problem:** The default `librealsense` packages from Intel do not support the Jetson's Tegra USB kernel. The RealSense node starts but IMU data is unavailable, and the camera may fail to enumerate.
+
+**Fix:** Build `librealsense` from source with `FORCE_RSUSB_BACKEND=ON`:
+
+```bash
+cmake .. \
+  -DFORCE_RSUSB_BACKEND=ON \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_EXAMPLES=false \
+  -DBUILD_GRAPHICAL_EXAMPLES=false
+```
+
+Also update the D435i firmware to 5.17.x via `rs-fw-update`.
+
+**Problem:** RealSense node exits cleanly with no output when `LD_LIBRARY_PATH` doesn't include the Humble library path on aarch64.
+
+**Fix:** Prefix the launch command:
+
+```bash
+LD_LIBRARY_PATH=/opt/ros/humble/lib/aarch64-linux-gnu:$LD_LIBRARY_PATH \
+ros2 launch realsense2_camera rs_launch.py ...
+```
+
+### RealSense IMU
+
+**Problem:** RTAB-Map rejects IMU data with `IMU received doesn't have orientation set, it is ignored.`
+
+**Cause:** The D435i publishes raw accel + gyro without orientation. RTAB-Map requires orientation in the IMU message.
+
+**Fix:** Run `imu_filter_madgwick` to fuse accel + gyro into a full IMU message with orientation:
+
+```bash
+ros2 run imu_filter_madgwick imu_filter_madgwick_node \
+  --ros-args -p use_mag:=false -p publish_tf:=false \
+  -r imu/data_raw:=/camera/camera/imu \
+  -r imu/data:=/camera/camera/imu/filtered
+```
+
+### RealSense Double Namespace
+
+**Problem:** Topics appear as `/camera/camera/infra1/...` instead of `/camera/infra1/...`.
+
+**Cause:** The RealSense launch uses both a namespace and a `camera_name` parameter that both default to `camera`.
+
+**Impact:** All topic remappings must use the double prefix `/camera/camera/`.
+
+### QoS Mismatches
+
+**Problem:** RTAB-Map doesn't receive data from sensors despite topics being published.
+
+**Cause:** RealSense publishes with `SENSOR_DATA` QoS (best effort), SICK publishes with `RELIABLE` + `TRANSIENT_LOCAL`.
+
+**Fix:** Set QoS per-topic in RTAB-Map:
+
+```python
+'qos_image': 1,        # SENSOR_DATA for RealSense
+'qos_camera_info': 1,  # SENSOR_DATA for RealSense
+'qos_scan': 0,         # RELIABLE for SICK
+```
+
+### RTAB-Map Stereo + Scan Sync
+
+**Problem:** When using `subscribe_stereo=true` with `subscribe_scan=true`, the scan topic is never subscribed by RTAB-Map. The subscription printout shows only the 4 stereo topics.
+
+**Cause:** In `rtabmap_ros` 0.22.1 for Humble, the stereo callback does not include scan in its approximate time sync filter. This also applies when `subscribe_odom_info=true`.
+
+**Fix:** Use `subscribe_depth=true` instead of `subscribe_stereo=true`. Feed the left IR image as `rgb/image` and the actual depth image as `depth/image`:
+
+```python
+'subscribe_depth': True,
+'subscribe_stereo': False,
+'subscribe_scan': True,
+```
+
+With remappings:
+
+```python
+('rgb/image', '/camera/camera/infra1/image_rect_raw'),
+('depth/image', '/camera/camera/depth/image_rect_raw'),
+('rgb/camera_info', '/camera/camera/infra1/camera_info'),
+('scan', '/scan'),
+```
+
+### Wheel Odometry Heading Drift
+
+**Problem:** 90° turns appear as ~60-70° in the map. The occupancy grid has skewed corners.
+
+**Cause:** VESC wheel odometry computes yaw from steering angle and velocity, which is inaccurate at speed.
+
+**Mitigation:** RTAB-Map's ICP scan matching (`RGBD/NeighborLinkRefining`) corrects heading between consecutive nodes. Key parameters:
+
+```python
+'Reg/Strategy': '2',           # visual + ICP
+'Reg/Force3DoF': 'true',       # constrain to 2D
+'RGBD/AngularUpdate': '0.05',  # node every ~3°
+'RGBD/LinearUpdate': '0.1',    # node every 10cm
+'Rtabmap/DetectionRate': '5.0', # 5 Hz processing
+```
+
+## Launch Commands
+
+### RealSense Camera
+
+```bash
+LD_LIBRARY_PATH=/opt/ros/humble/lib/aarch64-linux-gnu:$LD_LIBRARY_PATH \
+ros2 launch realsense2_camera rs_launch.py \
+  enable_gyro:=true \
+  enable_accel:=true \
+  unite_imu_method:=2 \
+  enable_color:=false \
+  enable_depth:=true \
+  depth_module.depth_profile:=424x240x30 \
+  depth_module.infra_profile:=424x240x30 \
+  enable_infra1:=true \
+  enable_infra2:=false
+```
+
+### Mapping
+
+```bash
+rm ~/.ros/rtabmap.db
+ros2 launch ~/f1tenth_ws/src/rtabmap_f1tenth.launch.py
+```
+
+Drive slowly around the full track. Ctrl+C when done. Map saves to `~/.ros/rtabmap.db`.
+
+### Save Occupancy Grid
+
+While RTAB-Map is running:
+
+```bash
+ros2 run nav2_map_server map_saver_cli -f ~/f1tenth_ws/track_map \
+  --ros-args -p map_subscribe_transient_local:=true
+```
+
+### Record Waypoints
+
+In localization mode, drive the desired racing line:
+
+```bash
+python3 ~/f1tenth_ws/src/record_waypoints.py
+```
+
+### Localization (Racing)
+
+Edit `rtabmap_f1tenth.launch.py`:
+
+```python
+'Mem/IncrementalMemory': 'false',
+'Mem/InitWMWithAllNodes': 'true',
+```
+
+Then launch without deleting the database:
+
+```bash
+ros2 launch ~/f1tenth_ws/src/rtabmap_f1tenth.launch.py
+```
+
+Start near where mapping began. RTAB-Map publishes corrected pose on `/localization_pose`.
+
+## Dependencies
+
+```bash
+sudo apt install \
+  ros-humble-rtabmap-ros \
+  ros-humble-imu-filter-madgwick \
+  ros-humble-nav2-map-server
 ```
