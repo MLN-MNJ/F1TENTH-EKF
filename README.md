@@ -202,7 +202,7 @@ Set `qos: 1` (SENSOR_DATA) for RealSense topics, `qos: 0` (RELIABLE) for SICK.
 
 **Fix:** Fuse with IMU via the EKF node. The IMU provides accurate yaw rate and orientation that corrects the heading drift. Disable the VESC odom node's TF publishing so only the EKF publishes `odom → base_link`.
 
-![EKF vs raw odom at 5 m/s](sensors_bringup/Screenshot 2026-04-19 194825.png)
+![EKF vs raw odom at 5 m/s](EKFvsODOM.png)
 
 *Visualization at 5 m/s showing drift and wheelslip. Cyan: recorded waypoints. Purple: EKF-fused odometry (`/odom_ekf`). Green: raw wheel odometry (`/odom`). The raw odom diverges wildly off-track due to heading drift and wheelslip at speed, while the EKF-fused output stays closer to the actual driven path by incorporating IMU yaw corrections.*
 
