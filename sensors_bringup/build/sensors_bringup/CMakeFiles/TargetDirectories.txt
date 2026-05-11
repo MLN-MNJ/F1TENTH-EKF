@@ -1,9 +1,0 @@
-/home/nvidia/f1tenth_ws/src/sensors_bringup/build/sensors_bringup/CMakeFiles/uninstall.dir
-/home/nvidia/f1tenth_ws/src/sensors_bringup/build/sensors_bringup/CMakeFiles/sensors_bringup_uninstall.dir
-/home/nvidia/f1tenth_ws/src/sensors_bringup/build/sensors_bringup/CMakeFiles/test.dir
-/home/nvidia/f1tenth_ws/src/sensors_bringup/build/sensors_bringup/CMakeFiles/edit_cache.dir
-/home/nvidia/f1tenth_ws/src/sensors_bringup/build/sensors_bringup/CMakeFiles/rebuild_cache.dir
-/home/nvidia/f1tenth_ws/src/sensors_bringup/build/sensors_bringup/CMakeFiles/list_install_components.dir
-/home/nvidia/f1tenth_ws/src/sensors_bringup/build/sensors_bringup/CMakeFiles/install.dir
-/home/nvidia/f1tenth_ws/src/sensors_bringup/build/sensors_bringup/CMakeFiles/install/local.dir
-/home/nvidia/f1tenth_ws/src/sensors_bringup/build/sensors_bringup/CMakeFiles/install/strip.dir

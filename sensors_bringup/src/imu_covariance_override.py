@@ -16,7 +16,7 @@ class ImuCovarianceOverride(Node):
 
         self.sub = self.create_subscription(Imu, '/camera/camera/imu', self.cb, qos)
         self.pub = self.create_publisher(Imu, '/imu/data', qos)
-        self.gyro_var = 0.0001
+        self.gyro_var = 0.001
 
         self.calibrating = True
         self.cal_samples = []
@@ -41,7 +41,8 @@ class ImuCovarianceOverride(Node):
                 self.get_logger().info(
                     f'Gyro bias: x={self.bias_x:.6f} y={self.bias_y:.6f} z={self.bias_z:.6f}'
                 )
-            return
+            # Publish during calibration with current (possibly zero) bias so ICP
+            # receives IMU data from frame 1 and never gets a null motion guess.
 
         gx = msg.angular_velocity.x - self.bias_x
         gy = msg.angular_velocity.y - self.bias_y
@@ -49,7 +50,7 @@ class ImuCovarianceOverride(Node):
 
         msg.angular_velocity.x = gz
         msg.angular_velocity.y = -gx
-        msg.angular_velocity.z = gy
+        msg.angular_velocity.z = -gy
 
         msg.orientation.x = 0.0
         msg.orientation.y = 0.0

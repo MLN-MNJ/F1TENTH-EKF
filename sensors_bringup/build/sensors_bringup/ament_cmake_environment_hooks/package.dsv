@@ -1,4 +1,0 @@
-source;share/sensors_bringup/local_setup.bash
-source;share/sensors_bringup/local_setup.dsv
-source;share/sensors_bringup/local_setup.sh
-source;share/sensors_bringup/local_setup.zsh
